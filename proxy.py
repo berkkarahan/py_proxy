@@ -10,7 +10,7 @@ FILTERS = ["all", "au", "bd", "br", "by", "ca", "co", "cz", "de", "do", "ec", "e
 
 
 class Proxy:
-    def __init__(self, country_code="all"):
+    def __init__(self, country_code="all", validate_proxies=True):
 
         self.session = requests.Session()
 
@@ -29,6 +29,7 @@ class Proxy:
             self.filter = "all"
 
         self.index = 0
+        self.validindex = 0
         self.proxies = self.fetch_proxies(self.filter)
         if len(self.proxies) <= 0:
             print("no proxies found! try using the 'all' filter")
@@ -37,10 +38,12 @@ class Proxy:
             self.proxy = self.format_proxy(self.proxies[self.index])
 
         #ready to be used with requests and validated.
-        self.validproxy = []
+        self.validproxylist = []
+        self.validproxy = None
         self.lock = threading.Lock()
         #validate and fill up the list
-        self._thr_validate_proxies(chunksize=8)
+        if validate_proxies:
+            self.validate_proxies(chunksize=8)
 
     @staticmethod
     def fetch_proxies(country_="all"):
@@ -87,12 +90,18 @@ class Proxy:
             print("retrieved " + str(len(proxies)) + " proxies")
             return proxies
 
+    def cycleValid(self):
+        self.validproxy = self.format_proxy(self.validproxylist[self.validindex])
+        self.validindex = self.validindex + 1
+        if self.validindex >= len(self.validproxylist):
+            self.validindex = 0
+
     def _thr_test(self, proxy_):
-        res = self._test_proxy(proxy_)
+        res = self.test_proxy(proxy_)
         if res == 1:
             self.lock.acquire()
             try:
-                self.validproxy.append(proxy_)
+                self.validproxylist.append(proxy_)
             finally:
                 self.lock.release()
 
@@ -100,7 +109,8 @@ class Proxy:
         for p in plist:
             self._thr_test(p)
 
-    def _thr_validate_proxies(self, chunksize=8):
+    def validate_proxies(self, chunksize=8):
+        self.validproxylist=[]
         def _chunks(l, n):
             for i in range(0, len(l), n):
                 yield l[i:i+n]
@@ -127,7 +137,7 @@ class Proxy:
         return proxy_dict
 
     @staticmethod
-    def _test_proxy(proxy_):
+    def test_proxy(proxy_):
         url = "https://www.iplocation.net/find-ip-address"
         print("testing proxy...")
         try:
